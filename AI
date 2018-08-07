@@ -1,0 +1,161 @@
+from selenium import webdriver
+
+url = "http://users.ugent.be/~sevbesau/GekleurdeDruppels/"
+
+driver = webdriver.Firefox()
+driver.get(url)
+
+
+def getGrid():
+    grid = []
+    row = []
+
+    elem = driver.find_element_by_class_name("rooster")
+    rooster = elem.find_elements_by_xpath(".//*")
+
+    for dot in rooster:
+        id = dot.get_attribute("id")
+        if "row" not in id and id != "":
+            colour = ((dot.get_attribute("style")).split(" "))[1]
+            row.append(colour)
+        elif row != []:
+            grid.append(row)
+            row = []
+    grid.append(row)
+
+    return grid
+
+
+def getClusters(grid):
+    visited = []
+    clusters = []
+    active_cluster = []
+    for y in range(len(grid)):
+        for x in range(len(grid)):
+            if(x, y) not in visited:
+                temp = checkNode(x, y, grid, [(x, y)])
+                visited += temp
+                if (x, y) == (0, 0):
+                    active_cluster = temp
+                else:
+                    clusters.append((grid[x][y], temp))
+
+    clusters.sort(reverse = True, key=lambda x: len(x[1]))
+    return active_cluster, clusters
+
+
+def getDistance(cluster1, cluster2):
+    distance = 255
+    for n1 in cluster1:
+        for n2 in cluster2:
+            dist = getNodeDistance(n1, n2)
+            if dist < distance:
+                distance = dist
+    return distance
+
+def getNodeDistance(node1, node2):
+    diff = (abs(node1[0]-node2[0]), abs(node1[1]-node2[1]))
+    return (diff[0]**2 + diff[1]**2)**(1/2)
+
+
+def isSolved(grid):
+    for y in range(len(grid)):
+        if y != len(grid)-1:
+            if grid[y][0] != grid[y+1][0]:
+                return False
+
+        for x in range(len(grid) - 1):
+            if grid[y][x]!=grid[y][x+1]:
+                return False
+
+    return True
+
+
+def checkNode(x, y, grid, cluster):
+    if x > 0:
+        if grid[x-1][y] == grid[x][y] and (x-1, y) not in cluster:
+            cluster.append((x-1, y))
+            checkNode(x-1, y, grid, cluster)
+    if x <len(grid)-1:
+        if grid[x+1][y] == grid[x][y] and (x+1, y) not in cluster:
+            cluster.append((x+1, y))
+            checkNode(x+1, y, grid, cluster)
+    if y > 0:
+        if grid[x][y-1] == grid[x][y] and (x, y-1) not in cluster:
+            cluster.append((x, y-1))
+            checkNode(x, y-1, grid, cluster)
+    if y <len(grid)-1:
+        if grid[x][y+1] == grid[x][y] and (x, y+1) not in cluster:
+            cluster.append((x, y+1))
+            checkNode(x, y+1, grid, cluster)
+    return cluster
+
+def getClusterFromNode(clusters, node):
+    for cluster in clusters:
+        if node in cluster[1]:
+            return cluster
+
+def getClosestNodes(cluster1, cluster2):
+    node1=(-1, -1)
+    node2=(-1, -1)
+    distance=255
+    for n1 in cluster1:
+        for n2 in cluster2:
+            d = getNodeDistance(n1, n2)
+            if d < distance:
+                node1 = n1
+                node2 = n2
+                distance = d
+    return node1, node2
+
+
+def determineMove():
+    grid = getGrid()
+    activeCluster, clusters = getClusters(grid)
+
+    options = []
+    for cluster in clusters:
+        options.append([cluster, len(cluster[1])/getDistance(activeCluster, cluster[1])])
+    options.sort(reverse = True, key=lambda x:x[1])
+
+    print(options)
+    nodes = getClosestNodes(activeCluster, options[0][0][1])
+    print(nodes)
+    candidates = []
+    if nodes[0][0] != nodes[1][0]:
+        candidates.append((nodes[0][0]-sign(nodes[0][0]-nodes[1][0]), nodes[0][1]))
+    if nodes[0][1] != nodes[1][1]:
+        candidates.append((nodes[0][0], nodes[0][1]+sign(nodes[1][1]-nodes[0][1])))
+
+    print(candidates)
+    maxCluster = 0
+    best = 0
+
+    for i  in range(len(candidates)):
+        c = candidates[i]
+        size = len((getClusterFromNode(clusters, c))[1])
+        if size > maxCluster:
+            maxCluster =size
+            best = i
+    return getClusterFromNode(clusters, candidates[best])[0]
+
+
+
+def sign(x):
+    return int(x/abs(x))
+
+def makeMove(color):
+    selector = driver.find_element_by_id("colour")
+    options = selector.find_elements_by_tag_name("option")
+    for option in options:
+        print(option.get_attribute("id"))
+        if option.get_attribute("id") == color:
+            option.click()
+    driver.find_element_by_id("00").click()
+    print(color)
+
+while not isSolved(getGrid()) :
+    makeMove(determineMove())
+
+
+
